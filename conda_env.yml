@@ -2,19 +2,27 @@ name: bpref
 channels:
   - defaults
 dependencies:
-  - python=3.6
-  - pytorch=1.4.0
+  - python=3.8
   - cudatoolkit=10.1
+  - pytorch=1.4.0
+  - numpy=1.19.5        # Required for MuJoCo-compatible dm_control
+  - matplotlib          # Compatible with numpy 1.19
   - absl-py
   - pyparsing
   - pip
   - pip:
-    - termcolor
-    - git+git://github.com/deepmind/dm_control.git@d1fe1d14fb229d3ad784e40d8c54491d30e1f08a
-    - tb-nightly
-    - imageio
-    - imageio-ffmpeg
-    - git+git://github.com/facebookresearch/hydra@0.11_branch
-    - matplotlib
-    - glfw==1.11.2
-    - scikit-image
+      - termcolor
+      - tb-nightly==2.4.0a20210301    
+      - imageio
+      - imageio-ffmpeg
+      - git+https://github.com/facebookresearch/hydra@0.11_branch
+      - glfw==1.11.2
+      - scikit-image==0.18.3          # Last version supporting numpy 1.19
+      - gym==0.21.0                   # Last Gym version using old API
+      - cached-property
+      - mako
+      - pygame
+      - python-dateutil
+      - scipy==1.10.1
+      - joblib
+
