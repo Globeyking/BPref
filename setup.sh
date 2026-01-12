@@ -47,7 +47,7 @@ cd ../custom_dmc2gym
 pip install -e .
 
 echo "=== Installing Metaworld (old version) ==="
-pip install "metaworld==0.0.1.dev0"
+pip install "metaworld==0.0.1.dev0" # modifier import metaworld et ajouter version.txt dans baseline
 
 echo "=== Installing PyBullet ==="
 pip install pybullet
