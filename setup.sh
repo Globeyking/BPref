@@ -8,7 +8,7 @@ conda activate bpref
 
 echo "=== Installing MuJoCo 2.0 ==="
 mkdir -p ~/.mujoco
-wget https://mujoco.org/download/mujoco200_linux.zip -O /tmp/mujoco200.zip
+wget https://www.roboti.us/download/mujoco200_linux.zip -O /tmp/mujoco200_linux.zip
 unzip /tmp/mujoco200.zip -d ~/.mujoco
 
 echo "=== Installing MuJoCo license key ==="
