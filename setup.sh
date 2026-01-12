@@ -83,7 +83,7 @@ pip install -e . 2>/dev/null
 cd ..
 
 echo "=== Installing Metaworld (old version compatible) ==="
-pip install "metaworld==0.0.1.dev0" 2>/dev/null
+pip install "metaworld==0.0.1.dev0" 2>/dev/null # modify with link install
 
 echo "=== Installing PyBullet ==="
 pip install pybullet 2>/dev/null
