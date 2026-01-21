@@ -18,13 +18,22 @@ steps_dict = {}
 print(f"Scanning {BASE_DIR} for data...")
 
 for root, _, files in os.walk(BASE_DIR):
-    if "train.csv" not in files:
+    # 1. Determine which file to use (prioritize eval.csv)
+    target_file = None
+    if "eval.csv" in files:
+        target_file = "eval.csv"
+    elif "train.csv" in files:
+        target_file = "train.csv"
+    
+    if not target_file:
         continue
 
-    path = os.path.join(root, "train.csv")
+    path = os.path.join(root, target_file)
+    
     if os.path.getsize(path) == 0:
         continue
 
+    # 2. Identify the label based on folder name
     folder = os.path.relpath(root, BASE_DIR).split(os.sep)[0]
     
     label = None
@@ -41,25 +50,37 @@ for root, _, files in os.walk(BASE_DIR):
         continue
 
     try:
+        # 3. Load and validate columns
         df = pd.read_csv(path, comment="#")
         if df.empty: continue
 
-        col = "true_episode_reward" if "true_episode_reward" in df.columns else "episode_reward"
-        if col not in df.columns or "step" not in df.columns:
+        # Flexible column selection
+        reward_col = None
+        for col in ["true_episode_reward", "episode_reward", "reward", "eval_reward"]:
+            if col in df.columns:
+                reward_col = col
+                break
+        
+        if not reward_col or "step" not in df.columns:
+            print(f"Skipping {path}: Required columns not found.")
             continue
 
-        curves[label].append(df[col].to_numpy())
+        curves[label].append(df[reward_col].to_numpy())
         steps_dict[label] = df["step"].to_numpy()
-        print(f"Loaded {label} from {path}")
+        print(f"Loaded {label} from {target_file} in {folder}")
 
     except Exception as e:
         print(f"Error loading {path}: {e}")
 
 if not curves:
-    print("No valid data found.")
+    print("No valid data found. Check your folder names and CSV column headers.")
     exit()
 
-plt.figure(figsize=(10, 6))
+# plot
+plt.figure(figsize=(12, 7))
+
+# 1. Pre-calculate and store data for sorting
+plot_results = []
 
 for label, runs in curves.items():
     min_len = min(len(r) for r in runs)
@@ -73,15 +94,39 @@ for label, runs in curves.items():
         mean = pd.Series(mean).rolling(SMOOTHING, min_periods=1).mean()
         std = pd.Series(std).rolling(SMOOTHING, min_periods=1).mean()
 
-    color = COLOR_MAP.get(label, "black")
-    plt.plot(x, mean, label=label, color=color, lw=2)
-    if data.shape[0] > 1:
-        plt.fill_between(x, mean - std, mean + std, color=color, alpha=0.15)
+    # Get the last valid value for sorting
+    final_val = mean.iloc[-1]
+    
+    plot_results.append({
+        "label": label,
+        "x": x,
+        "mean": mean,
+        "std": std,
+        "final_val": final_val,
+        "num_runs": data.shape[0]
+    })
+
+# 2. Sort results by final_val in descending order
+plot_results.sort(key=lambda x: x["final_val"], reverse=True)
+
+# 3. Plot in the sorted order
+for res in plot_results:
+    color = COLOR_MAP.get(res["label"], "black")
+    
+    plt.plot(res["x"], res["mean"], 
+             label=f"{res['label']} ({res['final_val']:.1f})", 
+             color=color, lw=2)
+    
+    if res["num_runs"] > 1:
+        plt.fill_between(res["x"], 
+                         res["mean"] - res["std"], 
+                         res["mean"] + res["std"], 
+                         color=color, alpha=0.1)
 
 plt.xlabel("Steps")
 plt.ylabel("Reward")
-plt.title("Performance Comparison")
-plt.legend(bbox_to_anchor=(1.05, 1), loc='upper left')
+plt.title("Performance Comparison (Ranked by Final Reward)")
+plt.legend(bbox_to_anchor=(1.05, 1), loc='upper left', fontsize='small')
 plt.grid(True, alpha=0.3)
 plt.tight_layout()
 plt.show()
