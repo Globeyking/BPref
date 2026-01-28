@@ -42,6 +42,9 @@ class Workspace(object):
         else:
             self.env = utils.make_env(cfg)
         
+        # adding a last eval step count variable for environement with uneven runs
+        self.lastEval = -self.cfg.eval_frequency
+        
         cfg.agent.params.obs_dim = self.env.observation_space.shape[0]
         cfg.agent.params.action_dim = self.env.action_space.shape[0]
         cfg.agent.params.action_range = [
@@ -97,8 +100,15 @@ class Workspace(object):
                     action = self.agent.act(obs, sample=False)
                 obs, reward, done, extra = self.env.step(action)
                 
-                episode_reward += reward
-                true_episode_reward += reward
+                r_hat = self.reward_model.r_hat(np.concatenate([obs, action], axis=-1))
+                
+                next_obs, reward, done, extra = self.env.step(action)
+                obs = next_obs # Mise à jour de obs
+
+                # CORRECTION 
+                episode_reward += r_hat     
+                true_episode_reward += reward 
+                
                 if self.log_success:
                     episode_success = max(episode_success, extra['success'])
                 
@@ -185,7 +195,9 @@ class Workspace(object):
                         self.step, save=(self.step > self.cfg.num_seed_steps))
 
                 # evaluate agent periodically
-                if self.step > 0 and self.step % self.cfg.eval_frequency == 0:
+                # the % step to count runs would not work for lunar lander as not every run is the same step number
+                if self.step > 0 and ((self.step % self.cfg.eval_frequency == 0) or (self.step - self.lastEval >= self.cfg.eval_frequency)):
+                    self.lastEval=self.step
                     self.logger.log('eval/episode', episode, self.step)
                     self.evaluate()
                 
@@ -292,7 +304,7 @@ class Workspace(object):
                 
             next_obs, reward, done, extra = self.env.step(action)
             reward_hat = self.reward_model.r_hat(np.concatenate([obs, action], axis=-1))
-
+            #reward_hat = 0 # calculs inutiles pour notre affichage ici :)
             # allow infinite bootstrap
             done = float(done)
             done_no_max = 0 if episode_step + 1 == self.env._max_episode_steps else done

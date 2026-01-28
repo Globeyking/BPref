@@ -169,30 +169,26 @@ class RewardModel:
         sa_t = np.concatenate([obs, act], axis=-1)
         r_t = rew
         
-        flat_input = sa_t.reshape(1, self.da+self.ds)
-        r_t = np.array(r_t)
-        flat_target = r_t.reshape(1, 1)
+        flat_input = sa_t.reshape(self.da+self.ds)
+        r_t = np.array(r_t).reshape(1)
 
-        init_data = len(self.inputs) == 0
-        if init_data:
-            self.inputs.append(flat_input)
-            self.targets.append(flat_target)
-        elif done:
-            self.inputs[-1] = np.concatenate([self.inputs[-1], flat_input])
-            self.targets[-1] = np.concatenate([self.targets[-1], flat_target])
-            # FIFO
+        if len(self.inputs) == 0:
+            self.inputs.append([])
+            self.targets.append([])
+
+        self.inputs[-1].append(flat_input)
+        self.targets[-1].append(r_t)
+
+        if done:
+            self.inputs[-1] = np.array(self.inputs[-1])
+            self.targets[-1] = np.array(self.targets[-1])
+            
             if len(self.inputs) > self.max_size:
                 self.inputs = self.inputs[1:]
                 self.targets = self.targets[1:]
+            
             self.inputs.append([])
             self.targets.append([])
-        else:
-            if len(self.inputs[-1]) == 0:
-                self.inputs[-1] = flat_input
-                self.targets[-1] = flat_target
-            else:
-                self.inputs[-1] = np.concatenate([self.inputs[-1], flat_input])
-                self.targets[-1] = np.concatenate([self.targets[-1], flat_target])
                 
     def add_data_batch(self, obses, rewards):
         num_env = obses.shape[0]
@@ -310,41 +306,40 @@ class RewardModel:
         return np.mean(ensemble_acc)
     
     def get_queries(self, mb_size=20):
-        len_traj, max_len = len(self.inputs[0]), len(self.inputs)
-        img_t_1, img_t_2 = None, None
+        if len(self.inputs) == 0:
+            return np.zeros((0, self.size_segment, self.ds+self.da)), \
+                   np.zeros((0, self.size_segment, self.ds+self.da)), \
+                   np.zeros((0, self.size_segment, 1)), \
+                   np.zeros((0, self.size_segment, 1))
+        valid_idxs = [i for i in range(len(self.inputs)) if len(self.inputs[i]) >= self.size_segment]
         
-        if len(self.inputs[-1]) < len_traj:
-            max_len = max_len - 1
+        # Fallback de sécurité (si que des crashs de 1 frame au début)
+        cur_seg = self.size_segment
+        if not valid_idxs:
+            valid_idxs = list(range(len(self.inputs)))
+            cur_seg = 1
         
-        # get train traj
-        train_inputs = np.array(self.inputs[:max_len])
-        train_targets = np.array(self.targets[:max_len])
-   
-        batch_index_2 = np.random.choice(max_len, size=mb_size, replace=True)
-        sa_t_2 = train_inputs[batch_index_2] # Batch x T x dim of s&a
-        r_t_2 = train_targets[batch_index_2] # Batch x T x 1
-        
-        batch_index_1 = np.random.choice(max_len, size=mb_size, replace=True)
-        sa_t_1 = train_inputs[batch_index_1] # Batch x T x dim of s&a
-        r_t_1 = train_targets[batch_index_1] # Batch x T x 1
-                
-        sa_t_1 = sa_t_1.reshape(-1, sa_t_1.shape[-1]) # (Batch x T) x dim of s&a
-        r_t_1 = r_t_1.reshape(-1, r_t_1.shape[-1]) # (Batch x T) x 1
-        sa_t_2 = sa_t_2.reshape(-1, sa_t_2.shape[-1]) # (Batch x T) x dim of s&a
-        r_t_2 = r_t_2.reshape(-1, r_t_2.shape[-1]) # (Batch x T) x 1
+        sa_t_1, sa_t_2, r_t_1, r_t_2 = [], [], [], []
 
-        # Generate time index 
-        time_index = np.array([list(range(i*len_traj,
-                                            i*len_traj+self.size_segment)) for i in range(mb_size)])
-        time_index_2 = time_index + np.random.choice(len_traj-self.size_segment, size=mb_size, replace=True).reshape(-1,1)
-        time_index_1 = time_index + np.random.choice(len_traj-self.size_segment, size=mb_size, replace=True).reshape(-1,1)
-        
-        sa_t_1 = np.take(sa_t_1, time_index_1, axis=0) # Batch x size_seg x dim of s&a
-        r_t_1 = np.take(r_t_1, time_index_1, axis=0) # Batch x size_seg x 1
-        sa_t_2 = np.take(sa_t_2, time_index_2, axis=0) # Batch x size_seg x dim of s&a
-        r_t_2 = np.take(r_t_2, time_index_2, axis=0) # Batch x size_seg x 1
-                
-        return sa_t_1, sa_t_2, r_t_1, r_t_2
+        for _ in range(mb_size):
+            # --- Paire 1 ---
+            idx1 = np.random.choice(valid_idxs)
+            traj1 = self.inputs[idx1]
+            # On choisit un point de départ aléatoire 
+            start1 = np.random.randint(0, len(traj1) - cur_seg + 1)
+            
+            sa_t_1.append(traj1[start1 : start1 + cur_seg])
+            r_t_1.append(self.targets[idx1][start1 : start1 + cur_seg])
+
+            idx2 = np.random.choice(valid_idxs)
+            traj2 = self.inputs[idx2]
+            start2 = np.random.randint(0, len(traj2) - cur_seg + 1)
+            
+            sa_t_2.append(traj2[start2 : start2 + cur_seg])
+            r_t_2.append(self.targets[idx2][start2 : start2 + cur_seg])
+
+        # Conversion finale en numpy array (format attendu par la suite du code)
+        return np.array(sa_t_1), np.array(sa_t_2), np.array(r_t_1), np.array(r_t_2)
 
     def put_queries(self, sa_t_1, sa_t_2, labels):
         total_sample = sa_t_1.shape[0]

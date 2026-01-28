@@ -37,6 +37,9 @@ class Workspace(object):
             self.log_success = True
         else:
             self.env = utils.make_env(cfg)
+            
+        # adding a last eval step count variable for environement with uneven runs
+        self.lastEval = -self.cfg.eval_frequency
 
         cfg.agent.params.obs_dim = self.env.observation_space.shape[0]
         cfg.agent.params.action_dim = self.env.action_space.shape[0]
@@ -113,7 +116,8 @@ class Workspace(object):
                         self.step, save=(self.step > self.cfg.num_seed_steps))
 
                 # evaluate agent periodically
-                if self.step > 0 and self.step % self.cfg.eval_frequency == 0:
+                if self.step > 0 and self.step % self.cfg.eval_frequency == 0 or (self.step - self.lastEval >= self.cfg.eval_frequency):
+                    self.lastEval=self.step
                     self.logger.log('eval/episode', episode, self.step)
                     self.evaluate()
 
