@@ -16,9 +16,31 @@ from torch import nn
 from torch import distributions as pyd
 
 def make_env(cfg):
+    if cfg.env.lower() == "pendulum":
+        import gym
+        from gym.wrappers import RescaleAction
+        
+        env = gym.make("Pendulum-v1")
+        env = RescaleAction(env, min_action=-1.0, max_action=1.0)
+        
+        env._max_episode_steps = env.spec.max_episode_steps
+        
+        env.domain_name = 'pendulum'
+        env.task_name = 'swingup'
+        
+        env.seed(cfg.seed)
+        env.action_space.seed(cfg.seed)
+        env.observation_space.seed(cfg.seed)
+        return env
+
     if cfg.env.lower() == "lunarlander":
         import gym
-        return gym.make("LunarLanderContinuous-v2")
+        env = gym.make("LunarLanderContinuous-v2")
+        env.domain_name = 'lunar'  
+        env.task_name = 'lander'
+        env.seed(cfg.seed)
+        env.action_space.seed(cfg.seed) 
+        return env
         
     if cfg.env == 'ball_in_cup_catch':
         domain_name = 'ball_in_cup'
@@ -36,6 +58,14 @@ def make_env(cfg):
     return env
 
 def ppo_make_env(env_id, seed):
+    if env_id.lower() == "pendulum":
+        import gym
+        from gym.wrappers import RescaleAction
+        env = gym.make("Pendulum-v1")
+        # Même punition : rescaling obligatoire pour PPO aussi
+        env = RescaleAction(env, min_action=-1.0, max_action=1.0)
+        env.seed(seed)
+        return env
     if env_id.lower() == "lunarlander":
         import gym
         env = gym.make("LunarLanderContinuous-v2")
